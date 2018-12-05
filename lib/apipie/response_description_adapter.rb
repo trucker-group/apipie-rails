@@ -105,28 +105,51 @@ module Apipie
         return self.send(key) if self.respond_to?(key.to_s)
       end
 
-      def add_sub_property(prop_desc)
-        raise "Only properties with expected_type 'object' can have sub-properties" unless @expected_type == 'object'
-        if prop_desc.is_a? PropDesc
-          @sub_properties << prop_desc
-        elsif prop_desc.is_a? Modifier
-          prop_desc.apply(self)
-        else
-          raise "Unrecognized prop_desc type (#{prop_desc.class})"
-        end
-      end
+  attr_accessor :parent
+  
+  def add_sub_property(prop_desc)
+    raise "Only properties with expected_type 'object' can have sub-properties" unless @expected_type == 'object'
+    if prop_desc.is_a? PropDesc
+      prop_desc.parent = self
+      @sub_properties << prop_desc
+    elsif prop_desc.is_a? Modifier
+      prop_desc.apply(self)
+    else
+      raise "Unrecognized prop_desc type (#{prop_desc.class})"
+    end
+  end
 
-      def to_json(lang)
-        {
-            name: name,
-            required: required,
-            validator: validator,
-            description: description,
-            additional_properties: additional_properties,
-            is_array: is_array?,
-            options: options
-        }
-      end
+  def full_name
+    name_parts = parents_and_self.map{|p| p.name }.compact
+    return name.to_s if name_parts.blank?
+    return ([name_parts.first] + name_parts[1..-1].map { |n| "[#{n}]" }).join("")
+  end
+
+  # returns an array of all the parents: starting with the root parent
+  # ending with itself
+  def parents_and_self
+    ret = []
+    if self.parent
+      ret.concat(self.parent.parents_and_self)
+    end
+    ret << self
+    ret
+  end
+
+  def to_json(lang)
+    {
+        name: name,
+        full_name: full_name,
+        required: required,
+        validator: validator.expected_type,
+        description: description,
+        additional_properties: additional_properties,
+        is_array: is_array?,
+        options: options,
+        show: true,
+        params: @sub_properties.map{|x| x.to_json(lang)}
+    }
+  end
       attr_reader :name, :required, :expected_type, :options, :description
       attr_accessor :additional_properties
 
